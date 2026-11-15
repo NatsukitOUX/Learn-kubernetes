@@ -1,4 +1,133 @@
-# Lab 4 — Kubernetes Deployments & MariaDB
+# Lab 4 — Running Applications in Kubernetes
+
+## Lesson 4 objectives
+
+- Run applications in Kubernetes.
+- Run and inspect standalone Pods.
+- Run, update and scale applications using Deployments.
+- Generate and apply YAML manifests.
+- Perform basic Kubernetes troubleshooting.
+
+---
+
+## 4.1 — Running standalone Pods
+
+A **Pod** is the smallest deployable unit managed by Kubernetes. It wraps one or more containers and adds cloud-useful features:
+
+- More than one tightly coupled container can run in the same Pod.
+- Containers in a Pod share networking (including the same IP and `localhost`) and can share storage volumes.
+- Containers can communicate easily, and Kubernetes tracks Pod metadata such as labels and annotations.
+
+**Limitations of standalone Pods:** A standalone Pod is not a self-healing, scalable workload. A container may restart inside its Pod based on its restart policy, but **deleting the standalone Pod will not automatically recreate it**. For managed replicas and rolling updates, use a controller such as a Deployment.
+
+**Lesson demo:**
+```bash
+kubectl run web --image=nginx
+kubectl get pods
+kubectl get all
+kubectl describe pod web
+kubectl delete pod web
+kubectl get all
+```
+
+**What to notice:** After deleting `web`, no controller recreates it. Compare this with the Deployment demo below.
+
+---
+
+## 4.2 — Running Deployments
+
+A **Deployment** manages a set of replicated Pods through ReplicaSets. It adds several useful cloud features:
+
+- **Scalability:** change the number of replicas.
+- **Application resilience:** recreate Pods when replicas disappear.
+- **Rolling updates:** gradually replace old Pods with new ones; appropriately configured rolling updates can avoid downtime.
+
+Some applications require different controllers:
+
+| Controller | When to use it |
+|---|---|
+| **Deployment** | Stateless apps, replicas and rolling application updates |
+| **DaemonSet** | Run a Pod on each eligible cluster node (for example, node agents) |
+| **StatefulSet** | Stateful applications needing stable identities and persistent storage, such as databases |
+
+**Lesson demo:**
+```bash
+kubectl create deploy myweb --image=nginx:1.17 --replicas=3
+kubectl get all
+# Find a full myweb Pod name with kubectl get pods, then:
+kubectl delete pod <MYWEB_POD_NAME>
+kubectl get all
+# nginx is the container name in the generated Deployment:
+kubectl set image deployment/myweb nginx=nginx:1.21
+kubectl get all
+```
+
+**What to notice:** Deleting one Pod does not delete the Deployment; its ReplicaSet creates a replacement. Changing the image triggers a rollout, which can be tracked using:
+
+```bash
+kubectl rollout status deployment/myweb
+kubectl get replicasets
+```
+
+**Command correction from my notes:** `kubectl set image deploy myweb --image=nginx:1.21` is not the correct syntax. Use `kubectl set image deployment/myweb nginx=nginx:1.21` (container name followed by image).
+
+---
+
+## 4.3 — Using YAML files to run applications
+
+Kubernetes manifests define the desired state of resources. Rather than writing every manifest from scratch, a convenient starting point is to **generate YAML** with `kubectl create ... --dry-run=client -o yaml` and edit the output.
+
+- `--dry-run=client`: construct the resource locally without creating it in the cluster.
+- `-o yaml`: print YAML instead of a normal status message.
+- `kubectl apply -f`: create or reconcile cluster resources from a manifest.
+- `kubectl get ... -o yaml`: inspect the full YAML of a currently running resource.
+- `kubectl explain`: discover documented resource fields, e.g. `kubectl explain deploy.spec`.
+
+**Lesson demo:**
+```bash
+kubectl create deploy myapp --image=nginx:1.21 --replicas=3 --dry-run=client -o yaml > myapp.yaml
+kubectl apply -f myapp.yaml
+nano myapp.yaml
+# In the file, change spec.replicas from 3 to 2
+kubectl apply -f myapp.yaml
+kubectl get deploy myapp -o yaml | less
+kubectl get all
+kubectl delete -f myapp.yaml
+```
+
+**What to notice:** `kubectl apply` updates the desired replica count; the Deployment then reconciles the actual number of Pods to the value in the manifest. `kubectl delete -f myapp.yaml` removes the resource described in the file. Unlike a local file, the YAML returned by `kubectl get -o yaml` contains server-generated fields such as status and metadata.
+
+---
+
+## 4.4 — Kubernetes basic troubleshooting
+
+When a Pod is not running, use its **status, events and logs** to find the reason before changing configuration.
+
+**Lesson demo (MariaDB):**
+```bash
+kubectl create deploy mydb --image=mariadb
+kubectl get pods
+# Copy the full mydb Pod name:
+kubectl describe pod <MYDB_POD_NAME>
+kubectl logs <MYDB_POD_NAME>
+# For this local demonstration only:
+kubectl set env deploy mydb MARIADB_ROOT_PASSWORD=password
+kubectl get all --selector app=mydb
+kubectl get all --show-labels
+```
+
+**Troubleshooting workflow:**
+
+1. Run `kubectl get pods` to check for `Pending`, `ErrImagePull`, `CrashLoopBackOff`, `Error` or missing readiness.
+2. Run `kubectl describe pod POD_NAME` to inspect details and **Events**.
+3. Run `kubectl logs POD_NAME` (or `kubectl logs POD_NAME --previous` for a restarted container) to inspect application errors.
+4. Fix the image or configuration, then run `kubectl get pods -l app=mydb` and `kubectl get deployment mydb` again.
+
+**Corrections from my notes:** The command is `kubectl logs` (plural), not `kubectl log`. The label-filter option is `--selector` or `-l`, not `--sector`. `kubectl set env` takes `NAME=value` on the same command line.
+
+> **Security and data note:** `password` here is a throwaway value used only for the lesson. Use a Kubernetes Secret in real environments. Also, a Deployment does not automatically give MariaDB durable storage or database replication; this lesson demonstrates Pod and Deployment troubleshooting, not a production database architecture.
+
+---
 
 ## What this lab was about
 
