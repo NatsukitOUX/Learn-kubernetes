@@ -410,4 +410,24 @@ Server socket created on IP: '0.0.0.0', port: '3306'.
 mariadbd: ready for connections.
 ```
 
-**⚠️ Grading status:** Not confirmed. The most recent recorded grading attempt failed to locate `newdb.yaml` under `sudo`; a non-root attempt was interrupted while traversing protected Podman storage. Re-run the grader after fixing its search scope, and record the actual final output when available.
+**✅ Grading status: PASS (confirmed by subsequent terminal output).**
+
+The grader was run successfully by explicitly preserving the user's home directory and kubeconfig:
+
+```bash
+cd ~/learn/kubernetes/kubestep
+sudo env HOME="$HOME" KUBECONFIG="$HOME/.kube/config" ./labs/lab4-grade.sh
+```
+
+**Observed grading output:**
+
+```text
+[OK] I have found the YAML file newdb.yaml.
+[OK] I have found a deployment with the name newdb.
+[OK] I have found no errors in the deployment newdb.
+
+[CONGRATS] you have successfully completed this lab, please move on to the next lesson
+rm: cannot remove '/tmp/lab4check2': No such file or directory
+```
+
+The final `rm` warning is nonfatal: the grading script attempts to delete a temporary marker that was not present. To make that cleanup idempotent, change `rm /tmp/lab4check2` to `rm -f /tmp/lab4check2`. The grader had already printed its success message.
